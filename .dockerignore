@@ -30,6 +30,11 @@ htmlcov
 config.yaml
 config.local.yaml
 outputs
+output
+models
+postman
+*.private.env
+*.private.json
 **/*.pth
 **/*.safetensors
 services/layout_analyze/models/*

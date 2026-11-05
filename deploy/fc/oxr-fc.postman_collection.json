@@ -1,0 +1,110 @@
+{
+  "info": {
+    "name": "OXR Alibaba FC - live acceptance",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{fc_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": ""
+    },
+    {
+      "key": "fc_token",
+      "value": ""
+    },
+    {
+      "key": "document_path",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Service version",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Readiness",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/health/ready"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Parse document",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{base_url}}/v1/parse/sync",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{document_path}}"
+            },
+            {
+              "key": "output_formats",
+              "type": "text",
+              "value": "markdown"
+            },
+            {
+              "key": "output_formats",
+              "type": "text",
+              "value": "json"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));",
+              "pm.test(\"OXR business success\",()=>{const b=pm.response.json();pm.expect(b.code).to.eql(0);pm.expect(b.data.result).to.have.property(\"outputs\");});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

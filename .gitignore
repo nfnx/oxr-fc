@@ -35,6 +35,11 @@ htmlcov/
 uv.lock
 config.yaml
 config.local.yaml
+models/
+*.private.env
+*.private.json
+.env.*
+!.env.example
 .playwright-cli/
 .DS_Store
 .superpowers/

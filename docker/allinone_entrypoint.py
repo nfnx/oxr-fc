@@ -65,6 +65,7 @@ class AllInOneConfig:
     oxr_bin: str
     dfine_python: str
     vllm_extra_args: tuple[str, ...]
+    max_num_seqs: int = 16
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "AllInOneConfig":
@@ -142,6 +143,7 @@ class AllInOneConfig:
             oxr_bin=source.get("OXR_BIN", "/opt/oxr-venv/bin/oxr"),
             dfine_python=source.get("DFINE_PYTHON", "/opt/dfine-venv/bin/python"),
             vllm_extra_args=vllm_extra_args,
+            max_num_seqs=_env_int(source, "VLLM_MAX_NUM_SEQS", 16),
         )
 
     @property
@@ -195,7 +197,7 @@ class AllInOneConfig:
             "--attention-config",
             '{"backend":"TRITON_ATTN"}',
             "--max-num-seqs",
-            "16",
+            str(self.max_num_seqs),
             *self.vllm_extra_args,
         ]
 
@@ -436,9 +438,11 @@ async def _prepare_plugin(
         ])
 
 
-async def _run(config: AllInOneConfig) -> int:
-    stop_requested = asyncio.Event()
-    _install_signal_handlers(stop_requested)
+async def _run(config: AllInOneConfig, stop_requested: asyncio.Event | None = None) -> int:
+    # Embedded FC gateway owns signals; the normal Docker entrypoint still owns its own.
+    if stop_requested is None:
+        stop_requested = asyncio.Event()
+        _install_signal_handlers(stop_requested)
     processes: list[ManagedProcess] = []
 
     try:

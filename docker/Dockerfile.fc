@@ -1,0 +1,26 @@
+# ACR build context: repository root. Models are mounted separately from NAS.
+ARG VLLM_IMAGE=vllm/vllm-openai:v0.25.1@sha256:e4f88a835143cd22aee2397a26ec6bb80b3a4a6fe0c882bcbc63822904766089
+FROM ${VLLM_IMAGE}
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1 \
+    MODEL_PATH=/mnt/oxr-models/OXR-1.0 \
+    OXR_API_HOST=127.0.0.1 OXR_API_PORT=8000 VLLM_PORT=8080 DFINE_PORT=8081 \
+    VLLM_GPU_MEMORY_UTILIZATION=0.70 VLLM_MAX_MODEL_LEN=16384 VLLM_MAX_NUM_SEQS=4 \
+    ALLINONE_STARTUP_TIMEOUT=240 ALLINONE_SHUTDOWN_TIMEOUT=20 \
+    DFINE_DEVICE=cuda DFINE_CUDA_GRAPH=1 DFINE_PARALLEL_PREPROCESS=1 \
+    OXR__OXR_MODEL__MAX_CONCURRENCY=4 OXR__LAYOUT_ANALYZE_MODEL__BATCH_SIZE=2 \
+    OXR__LAYOUT_ANALYZE_MODEL__MAX_CONCURRENCY=1 \
+    OXR__PIPELINE__IMAGE_OUTPUT_DIR=/tmp/oxr-outputs \
+    OXR_FC_MAX_PAGES=20 OXR_FC_MAX_BODY_BYTES=20971520 \
+    TMPDIR=/tmp
+WORKDIR /app
+COPY . /app/
+RUN mkdir -p /tmp/oxr-home \
+    && python3 -m venv --system-site-packages /opt/vllm-venv \
+    && /opt/vllm-venv/bin/python -m pip install 'setuptools>=69' wheel \
+    && python3 -m venv --system-site-packages /opt/oxr-venv \
+    && /opt/oxr-venv/bin/python -m pip install -c /app/docker/requirements.allinone.txt /app \
+    && python3 -m venv --system-site-packages /opt/dfine-venv \
+    && /opt/dfine-venv/bin/python -m pip install -r /app/services/layout_analyze/requirements.txt
+EXPOSE 9000
+ENTRYPOINT ["/opt/oxr-venv/bin/python", "/app/deploy/fc/gateway.py"]
