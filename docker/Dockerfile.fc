@@ -1,7 +1,7 @@
 # ACR build context: repository root. Models are mounted separately from NAS.
-# Explicit official registry + amd64 child of the original v0.25.1 index.
-# ACR's docker.io accelerator returned HTTP 500 for that index; no runtime upgrade.
-ARG VLLM_IMAGE=registry-1.docker.io/vllm/vllm-openai:v0.25.1@sha256:f0b9a0dc75a9fca3b6811e3279367b2d6a448055a000bfd13859587d74cef268
+# Official v0.25.1 amd64 image copied into this account's ACR via artifact subscription.
+# Digest is unchanged; ACR builds pull the private base over the same-region VPC endpoint.
+ARG VLLM_IMAGE=rethos-gpu-registry-registry-vpc.cn-hangzhou.cr.aliyuncs.com/rethos/vllm-base:v0.25.1@sha256:f0b9a0dc75a9fca3b6811e3279367b2d6a448055a000bfd13859587d74cef268
 FROM ${VLLM_IMAGE}
 ARG PIP_INDEX_URL=https://pypi.org/simple
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1 \

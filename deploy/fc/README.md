@@ -34,6 +34,8 @@
 
 首次构建 `01A1AAC2-F482-56CB-9F2A-F84E97D6088F` 已失败：源码8a93229获取及Dockerfile解析成功，但阿里云Docker Hub加速地址对基础镜像manifest连续返回500，未进入依赖安装。随后只读核验官方Registry：v0.25.1索引digest仍为e4f88a835143cd22aee2397a26ec6bb80b3a4a6fe0c882bcbc63822904766089，amd64子镜像为f0b9a0dc75a9fca3b6811e3279367b2d6a448055a000bfd13859587d74cef268，manifest/config均200，33层压缩合计约8.213GiB。FC Dockerfile改用显式registry-1.docker.io及该子镜像，未升级推理版本。此核验只证明本机代理出口可读取元数据，不证明ACR构建机已能下载全部层；需要重新构建确认。由于fc-v1此前未成功发布，本次可继续用该标签；成功后不得覆盖它。
 
+第二次构建 `01A1AAC9-746C-5C85-BE7A-2F19A237220D` 使用57c0198，直连Docker Hub两次超时，仍未进入依赖安装。随后通过ACR制品订阅任务 `crast-m69pp5qj225u043t` 同步官方基础镜像，2026-11-05 16:27:13至16:35:19（北京时间）完成，控制台显示linux/amd64、8.213GB，digest与上述官方amd64子镜像完全一致。当前Dockerfile默认基础镜像已改为同实例VPC地址 `rethos-gpu-registry-registry-vpc.cn-hangzhou.cr.aliyuncs.com/rethos/vllm-base:v0.25.1@sha256:f0b9a0dc75a9fca3b6811e3279367b2d6a448055a000bfd13859587d74cef268`。这证明基础镜像已同步到ACR，不代表OXR构建或部署完成；需再次构建核验私有基础镜像拉取权限及后续依赖安装。
+
 ## 2. 模型与 NAS
 
 创建或复用同地域的 NAS、VPC、交换机和挂载点；先确认计费，再操作。运行函数要有访问该挂载点的网络和权限。模型目录只读使用，上传文件不进入共享模型目录。
