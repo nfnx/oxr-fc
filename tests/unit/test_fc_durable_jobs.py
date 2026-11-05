@@ -58,6 +58,17 @@ def test_business_error_persists_as_failed(tmp_path):
     assert store.get(job["task_id"])["status"]=="failed"
 
 
+def test_expired_cleanup_only_removes_owned_job_directory(tmp_path):
+    store=jobs.JobStore(tmp_path)
+    job=store.create("x",b"x",[],"x")
+    directory=store.directory(job["task_id"])
+    job["expires_at"]=time.time()-1;store.write(directory/"job.json",job)
+    foreign=tmp_path/"OXR-1.0";foreign.mkdir();(foreign/"weights").write_bytes(b"keep")
+    store.cleanup()
+    assert not directory.exists()
+    assert (foreign/"weights").read_bytes()==b"keep"
+
+
 def test_dispatch_uses_native_async_and_small_reference(monkeypatch):
     monkeypatch.setenv("OXR_FC_ASYNC_BASE_URL","https://example.fcapp.run")
     monkeypatch.setenv("OXR_FC_ASYNC_TOKEN","test-token")

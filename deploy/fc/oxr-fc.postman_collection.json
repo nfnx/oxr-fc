@@ -1,7 +1,8 @@
 {
   "info": {
-    "name": "OXR Alibaba FC - live acceptance",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    "name": "OXR Alibaba FC - complete business acceptance",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "All seven business APIs plus health and OpenAPI. Run with document_path, base_url, fc_token; use delay-request=3000 for bounded status polling. No Alibaba AccessKey required."
   },
   "auth": {
     "type": "bearer",
@@ -16,7 +17,7 @@
   "variable": [
     {
       "key": "base_url",
-      "value": ""
+      "value": "https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run"
     },
     {
       "key": "fc_token",
@@ -29,7 +30,7 @@
   ],
   "item": [
     {
-      "name": "Service version",
+      "name": "01 Service version",
       "request": {
         "method": "GET",
         "header": [],
@@ -41,14 +42,35 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));"
+              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));",
+              "pm.test(\"Version 1.1.0\",()=>pm.expect(pm.response.json().version).to.eql(\"1.1.0\"));"
             ]
           }
         }
       ]
     },
     {
-      "name": "Readiness",
+      "name": "02 Liveness",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/health/live"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));",
+              "pm.test(\"Alive\",()=>pm.expect(pm.response.json().status).to.eql(\"alive\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Readiness",
       "request": {
         "method": "GET",
         "header": [],
@@ -60,14 +82,35 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));"
+              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));",
+              "pm.test(\"Ready\",()=>pm.expect(pm.response.json().status).to.eql(\"ready\"));"
             ]
           }
         }
       ]
     },
     {
-      "name": "Parse document",
+      "name": "04 OpenAPI contract",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/openapi.json"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));",
+              "pm.test(\"Async and Demo documented\",()=>{const p=pm.response.json().paths;pm.expect(p).to.have.property(\"/v1/parse/async\");pm.expect(p).to.have.property(\"/v1/demo/jobs/{job_id}/assets/{asset_id}\");});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Sync parse",
       "request": {
         "method": "POST",
         "header": [],
@@ -79,16 +122,6 @@
               "key": "file",
               "type": "file",
               "src": "{{document_path}}"
-            },
-            {
-              "key": "output_formats",
-              "type": "text",
-              "value": "markdown"
-            },
-            {
-              "key": "output_formats",
-              "type": "text",
-              "value": "json"
             }
           ]
         }
@@ -100,7 +133,165 @@
             "type": "text/javascript",
             "exec": [
               "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));",
-              "pm.test(\"OXR business success\",()=>{const b=pm.response.json();pm.expect(b.code).to.eql(0);pm.expect(b.data.result).to.have.property(\"outputs\");});"
+              "pm.test(\"Business success\",()=>pm.expect(pm.response.json().code).to.eql(0));",
+              "pm.test(\"Both outputs returned\",()=>{const o=pm.response.json().data.result.outputs;pm.expect(o).to.have.property(\"markdown\");pm.expect(o).to.have.property(\"json\");});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Submit async",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{base_url}}/v1/parse/async",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{document_path}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));",
+              "pm.test(\"Business success\",()=>pm.expect(pm.response.json().code).to.eql(0));",
+              "const b=pm.response.json();if(b.code===0){pm.collectionVariables.set(\"task_id\",b.data.task_id);pm.collectionVariables.set(\"async_polls\",0);}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Poll async",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{base_url}}/v1/parse/async_check",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "task_id",
+              "type": "text",
+              "value": "{{task_id}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));",
+              "pm.test(\"Business success\",()=>pm.expect(pm.response.json().code).to.eql(0));",
+              "const b=pm.response.json();const d=b.data||{};let n=Number(pm.collectionVariables.get(\"async_polls\")||0)+1;pm.collectionVariables.set(\"async_polls\",n);",
+              "if([\"queuing\",\"processing\"].includes(d.status)&&n<60){pm.execution.setNextRequest(\"07 Poll async\");}else{pm.test(\"Async succeeded with outputs\",()=>{pm.expect(d.status).to.eql(\"success\");pm.expect(d.result).to.have.property(\"outputs\");});}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Submit Demo",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{base_url}}/v1/demo/jobs",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{document_path}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));",
+              "pm.test(\"Business success\",()=>pm.expect(pm.response.json().code).to.eql(0));",
+              "const b=pm.response.json();if(b.code===0){pm.collectionVariables.set(\"job_id\",b.data.id);pm.collectionVariables.set(\"demo_polls\",0);}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Poll Demo",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/v1/demo/jobs/{{job_id}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));",
+              "pm.test(\"Business success\",()=>pm.expect(pm.response.json().code).to.eql(0));",
+              "const d=pm.response.json().data||{};let n=Number(pm.collectionVariables.get(\"demo_polls\")||0)+1;pm.collectionVariables.set(\"demo_polls\",n);",
+              "if([\"queued\",\"rendering\",\"processing\"].includes(d.status)&&n<60){pm.execution.setNextRequest(\"09 Poll Demo\");}else{pm.test(\"Demo succeeded with preview\",()=>{pm.expect(d.status).to.eql(\"success\");pm.expect(d.pages.length).to.be.above(0);});if(d.pages&&d.pages.length)pm.collectionVariables.set(\"asset_path\",d.pages[0].image_url);}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Demo result",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/v1/demo/jobs/{{job_id}}/result"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));",
+              "pm.test(\"Business success\",()=>pm.expect(pm.response.json().code).to.eql(0));",
+              "pm.test(\"Demo outputs\",()=>pm.expect(pm.response.json().data).to.have.property(\"outputs\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Demo page image",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}{{asset_path}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));",
+              "pm.test(\"Image bytes\",()=>{pm.expect(pm.response.headers.get(\"Content-Type\")).to.match(/^image\\//);pm.expect(pm.response.size().body).to.be.above(0);});"
             ]
           }
         }

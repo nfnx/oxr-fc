@@ -39,7 +39,8 @@ def build(private=False):
             with path.open("x",encoding="utf-8"):pass
         if os.name=="nt":
             identity=os.environ.get("USERDOMAIN","")+"\\"+getpass.getuser()
-            subprocess.run(["icacls",str(path),"/inheritance:r","/grant:r",identity+":(F)","SYSTEM:(F)"],
+            executor=subprocess.check_output(["whoami"],text=True).strip()
+            subprocess.run(["icacls",str(path),"/inheritance:r","/grant:r",identity+":(F)",executor+":(F)","SYSTEM:(F)"],
                            check=True,capture_output=True)
         else:path.chmod(0o600)
         path.write_text(page.replace("&lt;FC_TOKEN&gt;",html.escape(token)),encoding="utf-8")

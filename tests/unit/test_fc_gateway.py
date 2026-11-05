@@ -195,6 +195,21 @@ def test_unknown_demo_job_is_not_a_local_file_read(client,tmp_path):
     assert client.get("/v1/demo/jobs/"+"a"*32).status_code==404
 
 
+@pytest.mark.parametrize("field,value", [("temperature","nan"),("top_p","inf"),("repetition_penalty","3")])
+def test_demo_rejects_nonfinite_or_out_of_contract_options(client,field,value):
+    client.post("/initialize")
+    result=client.post("/v1/demo/jobs",files={"file":("x.png",png())},data={field:value})
+    assert result.status_code==422
+    assert not client.app.state.runtime.calls
+
+
+def test_nonfinite_core_options_are_rejected():
+    from oxr.server.routes import _parse_request_options
+    for value in ("nan","inf","-inf"):
+        _,errors=_parse_request_options(None,None,'{"temperature":"'+value+'"}',None)
+        assert errors and "finite" in errors[0]
+
+
 def test_backend_timeout_fails_closed(client):
     client.post("/initialize")
     async def timeout(request):

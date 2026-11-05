@@ -35,6 +35,8 @@ models
 postman
 *.private.env
 *.private.json
+*.private.html
+**/*.private.html
 **/*.pth
 **/*.safetensors
 services/layout_analyze/models/*
