@@ -111,9 +111,88 @@ def test_request_size_limit(client):
     assert client.post("/v1/parse/sync", files={"file": ("doc.png", png())}).status_code == 413
 
 
-def test_process_local_async_and_demo_are_not_exposed(client):
-    for method, path in [("post", "/v1/parse/async"), ("post", "/v1/parse/async_check"), ("get", "/demo")]:
-        assert getattr(client, method)(path).status_code == 404
+def test_durable_async_requires_ready_and_query_requires_id(client):
+    assert client.post("/v1/parse/async").status_code == 503
+    assert client.post("/v1/parse/async_check").status_code == 422
+    assert client.get("/demo").status_code == 404
+
+
+def test_async_submit_execute_poll_and_duplicate_are_persistent(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("OXR_FC_ASYNC_BASE_URL", "https://worker.example")
+    monkeypatch.setenv("OXR_FC_ASYNC_TOKEN", "test-only")
+    runtime=client.app.state.runtime
+    runtime.jobs=gateway.jobs.JobStore(tmp_path)
+    executions=[]
+    async def backend(request):
+        if request.url.host=="worker.example":
+            assert request.headers["X-Fc-Invocation-Type"]=="Async"
+            return httpx.Response(202)
+        executions.append(request)
+        return httpx.Response(200,json={"code":0,"data":{"error":None,"result":{"file_name":"doc.png","outputs":{"markdown":"test"}},"metadata":{"page_num":1}}})
+    runtime.client._transport=httpx.MockTransport(backend)
+    client.post("/initialize")
+    response=client.post("/v1/parse/async",files={"file":("doc.png",png(),"image/png")})
+    assert response.status_code==200,response.text
+    task_id=response.json()["data"]["task_id"]
+    assert client.post("/v1/parse/async_check",data={"task_id":task_id}).json()["data"]["status"]=="queuing"
+    job=runtime.jobs.get(task_id)
+    ticket={"task_id":task_id,"ticket":job["ticket"]}
+    assert client.post("/internal/tasks/run",json=ticket).status_code==200
+    # Reopening the journal models a query hitting a different instance.
+    runtime.jobs=gateway.jobs.JobStore(tmp_path)
+    status=client.post("/v1/parse/async_check",data={"task_id":task_id}).json()
+    assert status["data"]["status"]=="success"
+    assert status["data"]["result"]["outputs"]["markdown"]=="test"
+    assert client.post("/internal/tasks/run",json=ticket).json()["status"]=="duplicate_or_terminal"
+    assert len(executions)==1
+
+
+def test_worker_requires_private_job_ticket(client,tmp_path):
+    client.app.state.runtime.jobs=gateway.jobs.JobStore(tmp_path)
+    client.post("/initialize")
+    assert client.post("/internal/tasks/run",json={"task_id":"a"*32,"ticket":"wrong"}).status_code==403
+
+
+def test_openapi_describes_file_upload_and_bearer(client):
+    schema=client.get("/openapi.json").json()
+    assert schema["security"]==[{"FCBearer":[]}]
+    body=schema["paths"]["/v1/parse/sync"]["post"]["requestBody"]
+    assert body["content"]["multipart/form-data"]["schema"]["properties"]["file"]["format"]=="binary"
+
+
+def test_demo_job_result_and_assets_survive_reopening_store(client,tmp_path,monkeypatch):
+    import json
+    monkeypatch.setenv("OXR_FC_ASYNC_BASE_URL","https://worker.example")
+    monkeypatch.setenv("OXR_FC_ASYNC_TOKEN","test-only")
+    runtime=client.app.state.runtime
+    runtime.jobs=gateway.jobs.JobStore(tmp_path)
+    async def backend(request):
+        if request.url.host=="worker.example":return httpx.Response(202)
+        assert request.url.path=="/v1/internal/fc/demo"
+        body=json.loads(request.content); directory=runtime.jobs.directory(body["task_id"])
+        (directory/"images").mkdir()
+        (directory/"images/page-0000.png").write_bytes(png())
+        runtime.jobs.write(directory/"manifest.json",{"id":body["task_id"],"pages":[{"page_num":0}],
+            "assets":["page-0000.png"],"result_url":"/v1/demo/jobs/"+body["task_id"]+"/result"})
+        return httpx.Response(200,json={"code":0,"data":{"error":None,"result":{"outputs":{"markdown":"demo"}},"metadata":{"page_num":1}}})
+    runtime.client._transport=httpx.MockTransport(backend)
+    client.post("/initialize")
+    response=client.post("/v1/demo/jobs",files={"file":("doc.png",png(),"image/png")},data={"temperature":"0","keep_header_footer":"true"})
+    assert response.status_code==200,response.text
+    job_id=response.json()["data"]["id"]
+    assert client.get(f"/v1/demo/jobs/{job_id}/result").status_code==409
+    job=runtime.jobs.get(job_id)
+    assert client.post("/internal/tasks/run",json={"task_id":job_id,"ticket":job["ticket"]}).status_code==200
+    runtime.jobs=gateway.jobs.JobStore(tmp_path)
+    assert client.get(f"/v1/demo/jobs/{job_id}").json()["data"]["status"]=="success"
+    assert client.get(f"/v1/demo/jobs/{job_id}/result").json()["data"]["outputs"]["markdown"]=="demo"
+    assert client.get(f"/v1/demo/jobs/{job_id}/assets/page-0000.png").content==png()
+    assert client.get(f"/v1/demo/jobs/{job_id}/assets/not-present.png").status_code==404
+
+
+def test_unknown_demo_job_is_not_a_local_file_read(client,tmp_path):
+    client.app.state.runtime.jobs=gateway.jobs.JobStore(tmp_path)
+    assert client.get("/v1/demo/jobs/"+"a"*32).status_code==404
 
 
 def test_backend_timeout_fails_closed(client):

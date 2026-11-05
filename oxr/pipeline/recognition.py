@@ -103,12 +103,14 @@ async def recognize_block(
 
     if block.type == BlockType.PICTURE:
         # No OCR for picture, just save it
-        return await asyncio.to_thread(postprocess_picture, block, crop_img, file_name, page_num)
+        return await asyncio.to_thread(postprocess_picture, block, crop_img, file_name, page_num,
+                                       element_formats.get("image", "url"))
     if (
         block.type == BlockType.CHEMICAL_STRUCTURE
         and element_formats.get("cs") == "image"
     ):
-        return await asyncio.to_thread(postprocess_picture, block, crop_img, file_name, page_num)
+        return await asyncio.to_thread(postprocess_picture, block, crop_img, file_name, page_num,
+                                       element_formats.get("image", "url"))
 
     sources: Dict[int, str] = {}
     if table_images:

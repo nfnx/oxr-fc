@@ -1,4 +1,5 @@
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
@@ -38,6 +39,9 @@ app.include_router(router, prefix="/v1")
 
 # OXR Online Demo — bundled UI and its dedicated API endpoints.
 app.include_router(demo_router, prefix="/v1")
+if os.environ.get("OXR_FC_MODE") == "1":
+    from deploy.fc.backend import router as fc_backend_router
+    app.include_router(fc_backend_router, prefix="/v1")
 DEMO_DIR = Path(__file__).parent / "demo"
 
 

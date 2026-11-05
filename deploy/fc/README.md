@@ -1,5 +1,15 @@
 # OXR 阿里云 FC 部署
 
+## 1.1.0 当前改造（尚未云端发布）
+
+新增 NAS 持久化异步提交/查询、FC 原生异步 worker、持久 Demo 的四个业务接口；修复 Picture 的 base64/none 输出。完整调用合同见 `docs/FC接口文档.md` 和根目录 `接口文档.html`。权重与密钥不进入镜像或 Git。
+
+部署必须注入 `OXR_FC_ASYNC_BASE_URL`（本函数 HTTP 触发器 HTTPS Base URL）和 `OXR_FC_ASYNC_TOKEN`（该触发器有效 Bearer Token）；默认 `OXR_JOB_ROOT=/mnt/oxr-models/.oxr-jobs` 复用已有 NAS 挂载。FC 原生异步投递只携带任务引用，文件/结果在 NAS；不能改为响应返回后的进程内 BackgroundTasks。
+
+代码更新默认从组织 `origin` 获取；个人副本保留为 `personal`。用户本轮已明确授权 OXR 部署代码推送两边，无需重复确认。Router 本轮暂停。
+
+以下为初版部署过程记录，其中“仅同步”“原 Demo 不覆盖”“upstream”及待构建的阶段描述不代表 1.1.0 的最终部署状态。真实状态必须以新的发布回执为准。
+
 当前阶段：FC 适配源码已准备，需经过 ACR 实际构建、NAS 模型准备、FC 初始化和真实文档验收，才能认定上线成功。Windows 本地契约测试不代表 GPU 或 Linux 容器验收。
 
 本轮本地结果：FC 网关15项通过；监督器可移植子集27项通过、5项POSIX集成跳过、5项因Windows路径/进程组差异未纳入该子集。首次完整尝试的Windows路径/killpg失败及临时父目录缺失没有计为功能通过。完整Linux进程回归、容器构建、真实PDF/GPU测试仍待云端进行。Postman集合只准备了3个真实验收请求，尚未运行；CLI未登录，未上传任何工作区或凭据。

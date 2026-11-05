@@ -1,0 +1,590 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OXR FC API</title><style>body{max-width:1100px;margin:40px auto;padding:0 24px;font:16px/1.75 system-ui;color:#172033}table{border-collapse:collapse;width:100%;display:block;overflow:auto}td,th{border:1px solid #d8dfe8;padding:9px;text-align:left}th{background:#f0f4fa}pre{background:#101c30;color:#e4efff;padding:18px;overflow:auto;border-radius:8px}code{overflow-wrap:anywhere}h1,h2,h3{line-height:1.35;margin-top:1.7em}a{color:#1465c0}</style><body><h1>OXR GPU 云函数调用文档</h1>
+<p>本文对应 FC 适配版本 <strong>1.1.0</strong>。当前源码待部署与云端验收；不要把旧 <code>fc-v1</code> 的同步验收结果当成新版全部能力已上线。</p>
+<h2>1. 地址、认证和调用约定</h2>
+<p>目标 Base URL：<code>https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run</code>。</p>
+<p>每个外部请求都需要 HTTP Header：</p>
+<pre><code class="language-http">Authorization: Bearer &lt;FC_TOKEN&gt;
+</code></pre>
+<p>FC_TOKEN 是 HTTP 触发器配置的 Bearer Token，不是阿里云 AccessKey，也不是模型供应商 Key。调用者不需要阿里云 SDK 或云账号。公开文档不包含真实 Token；受限本地私密版本可预填 Token。</p>
+<p>调用解析服务可处理 PDF、PNG、JPG/JPEG、WebP、BMP、单帧 TIF/TIFF。输出可包含文字、标题、阅读顺序、表格、公式、图片区域及坐标。Word/Excel/PPT 应先转换成 PDF。模型识别质量须对照原件检查。</p>
+<p>首次请求可能等待 GPU 分配、镜像准备和模型初始化。初始客户端读取超时建议 700 秒，连接超时 15 秒。HTTP 200 不等于业务成功：始终检查 <code>code == 0</code>、<code>data.error</code> 和实际输出。</p>
+<h2>2. 接口总览</h2>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td>/v1/parse/sync</td>
+<td>同步解析并返回结果</td>
+</tr>
+<tr>
+<td>POST</td>
+<td>/v1/parse/async</td>
+<td>持久化文件，提交 FC 原生异步任务</td>
+</tr>
+<tr>
+<td>POST</td>
+<td>/v1/parse/async_check</td>
+<td>查询共享 NAS 中的任务状态及结果</td>
+</tr>
+<tr>
+<td>POST</td>
+<td>/v1/demo/jobs</td>
+<td>提交带页面预览和图片资源的 Demo 任务</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>/v1/demo/jobs/{job_id}</td>
+<td>查询 Demo 状态、页面预览地址</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>/v1/demo/jobs/{job_id}/result</td>
+<td>获取 Demo 完整结果</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>/v1/demo/jobs/{job_id}/assets/{asset_id}</td>
+<td>下载页面或提取图片</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>/</td>
+<td>服务名、适配版本、同步解析路径</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>/health/live</td>
+<td>HTTP 服务存活</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>/health/ready</td>
+<td>模型及后端就绪</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>/docs</td>
+<td>Swagger UI HTML</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>/redoc</td>
+<td>ReDoc HTML</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>/openapi.json</td>
+<td>OpenAPI 描述</td>
+</tr>
+</tbody>
+</table>
+<p><code>POST /initialize</code> 是 FC 生命周期回调，平台自动调用。<code>POST /internal/tasks/run</code> 是内部异步执行入口，还需每任务私密票据，不是业务客户端接口。原 <code>/demo</code> 网页入口没有对外转发；Demo 的四个业务接口可由自己的前端调用，每次请求均携带认证 Header。</p>
+<h2>3. 同步解析</h2>
+<p>完整请求：</p>
+<pre><code class="language-bash">curl --request POST \
+  'https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run/v1/parse/sync' \
+  --header 'Authorization: Bearer &lt;FC_TOKEN&gt;' \
+  --form 'file=@/absolute/path/document.pdf' \
+  --form 'output_formats=markdown' \
+  --form 'output_formats=json' \
+  --form 'feature_config={&quot;keep_header_footer&quot;:true}' \
+  --form 'extra={&quot;temperature&quot;:0,&quot;top_p&quot;:1,&quot;repetition_penalty&quot;:1}' \
+  --form 'element_formats={&quot;image&quot;:&quot;base64&quot;,&quot;formula&quot;:&quot;latex&quot;,&quot;table&quot;:&quot;html&quot;,&quot;cs&quot;:&quot;smiles&quot;}'
+</code></pre>
+<p>Windows 请使用 <code>curl.exe</code>，并把文件路径换成本机真实路径。Postman：POST → URL → Authorization/Bearer Token → Body/form-data；<code>file</code> 类型为 File，其余为 Text。两行同名 <code>output_formats</code> 分别填写 markdown、json。不要手填 Content-Type，客户端负责生成 multipart boundary。</p>
+<h3>所有上传参数</h3>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>必填</th>
+<th>类型</th>
+<th>默认/允许值及解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>file</td>
+<td>是</td>
+<td>文件</td>
+<td>一次一个 PDF 或单帧图片；传真实字节，不是文件名或 URL</td>
+</tr>
+<tr>
+<td>output_formats</td>
+<td>否</td>
+<td>重复文本字段</td>
+<td>默认 markdown 和 json；仅返回 Markdown 时只传一行 markdown</td>
+</tr>
+<tr>
+<td>feature_config</td>
+<td>否</td>
+<td>JSON 字符串</td>
+<td><code>{"keep_header_footer":false}</code>；是否保留页眉页脚。其他布尔特性可能只产生“忽略”警告，不代表实现了对应功能</td>
+</tr>
+<tr>
+<td>extra</td>
+<td>否</td>
+<td>JSON 字符串</td>
+<td>可选 temperature、top_p、repetition_penalty；不传则沿用后端默认</td>
+</tr>
+<tr>
+<td>extra.temperature</td>
+<td>否</td>
+<td>数字</td>
+<td>0 到 2（含），模型采样温度</td>
+</tr>
+<tr>
+<td>extra.top_p</td>
+<td>否</td>
+<td>数字</td>
+<td>0 到 1（含），核采样参数</td>
+</tr>
+<tr>
+<td>extra.repetition_penalty</td>
+<td>否</td>
+<td>数字</td>
+<td>大于 0，重复惩罚系数</td>
+</tr>
+<tr>
+<td>element_formats</td>
+<td>否</td>
+<td>JSON 字符串</td>
+<td>图片默认 base64；其他默认 formula=latex、table=html、cs=smiles</td>
+</tr>
+<tr>
+<td>element_formats.image</td>
+<td>否</td>
+<td>字符串</td>
+<td>base64 或 none；base64 返回 Markdown 内嵌 data URI；none 不输出图片内容。FC 不接受 url/file</td>
+</tr>
+<tr>
+<td>element_formats.formula</td>
+<td>否</td>
+<td>字符串</td>
+<td>仅 latex 实际受支持</td>
+</tr>
+<tr>
+<td>element_formats.table</td>
+<td>否</td>
+<td>字符串</td>
+<td>html 或 markdown</td>
+</tr>
+<tr>
+<td>element_formats.cs</td>
+<td>否</td>
+<td>字符串</td>
+<td>smiles 或 image，化学结构输出形式</td>
+</tr>
+<tr>
+<td>api_key</td>
+<td>否</td>
+<td>文本</td>
+<td>原协议兼容字段，FC 自动补齐；它不是认证，不用填写真实密钥</td>
+</tr>
+</tbody>
+</table>
+<p>限制：完整上传请求体默认不超过 20 MiB；PDF 1–20 页；图片最多 2500 万像素，且仅一帧；一个实例同时执行一个文档。结果 JSON 超过 28 MiB 时拒绝返回，应拆分文档或选择 image=none。该结果预算为 FC 传输预留余量，不是模型能力限制。</p>
+<h3>成功响应示例</h3>
+<pre><code class="language-json">{
+  &quot;code&quot;: 0,
+  &quot;message&quot;: &quot;任务成功&quot;,
+  &quot;warnings&quot;: [],
+  &quot;data&quot;: {
+    &quot;task_id&quot;: &quot;example-task-id&quot;,
+    &quot;error&quot;: null,
+    &quot;result&quot;: {
+      &quot;file_name&quot;: &quot;document.pdf&quot;,
+      &quot;outputs&quot;: {
+        &quot;markdown&quot;: &quot;# 标题\n\n正文&quot;,
+        &quot;json&quot;: {&quot;pages&quot;: [{
+          &quot;page_num&quot;: 0,
+          &quot;page_size&quot;: {&quot;w&quot;: 1241, &quot;h&quot;: 1754},
+          &quot;merge_content_from_pre_page&quot;: false,
+          &quot;blocks&quot;: [{&quot;idx&quot;: 0, &quot;type&quot;: &quot;Title&quot;, &quot;bbox&quot;: [20, 30, 500, 80], &quot;content&quot;: &quot;标题&quot;, &quot;format&quot;: &quot;text&quot;}]
+        }]}
+      }
+    },
+    &quot;metadata&quot;: {&quot;page_num&quot;: 1, &quot;file_type&quot;: &quot;.pdf&quot;, &quot;processing_time_ms&quot;: 1800}
+  }
+}
+</code></pre>
+<h3>所有主要返回字段</h3>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>类型</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>code</td>
+<td>整数</td>
+<td>0 表示业务成功；1133 表示业务参数错误；1137 表示解析失败</td>
+</tr>
+<tr>
+<td>message</td>
+<td>字符串</td>
+<td>人类可读状态或错误说明，不要依赖完整文字做程序分支</td>
+</tr>
+<tr>
+<td>warnings</td>
+<td>字符串数组</td>
+<td>被忽略或受限选项等提示；没有警告时为空</td>
+</tr>
+<tr>
+<td>data</td>
+<td>对象/null</td>
+<td>成功载荷；业务错误时可能为 null</td>
+</tr>
+<tr>
+<td>data.task_id</td>
+<td>字符串</td>
+<td>本次任务标识；同步任务不承诺可用异步查询接口追查</td>
+</tr>
+<tr>
+<td>data.error</td>
+<td>字符串/null</td>
+<td>错误信息；正常为 null</td>
+</tr>
+<tr>
+<td>data.result.file_name</td>
+<td>字符串</td>
+<td>上传文件名</td>
+</tr>
+<tr>
+<td>data.result.outputs</td>
+<td>对象</td>
+<td>按 output_formats 选择的输出，不传的格式可能不存在</td>
+</tr>
+<tr>
+<td>outputs.markdown</td>
+<td>字符串</td>
+<td>Markdown；表格可能为 HTML，图片可能为 data URI</td>
+</tr>
+<tr>
+<td>outputs.json.pages</td>
+<td>数组</td>
+<td>按文档顺序排列的页面</td>
+</tr>
+<tr>
+<td>pages[].page_num</td>
+<td>整数</td>
+<td>从 0 开始的页面编号</td>
+</tr>
+<tr>
+<td>pages[].page_size.w/h</td>
+<td>整数</td>
+<td>渲染页面的宽/高，单位像素，不是 PDF 点数</td>
+</tr>
+<tr>
+<td>pages[].merge_content_from_pre_page</td>
+<td>布尔</td>
+<td>当前实现的跨页合并标记；不能据此承诺已完成跨页表格拼接</td>
+</tr>
+<tr>
+<td>pages[].blocks</td>
+<td>数组</td>
+<td>识别区块及阅读顺序</td>
+</tr>
+<tr>
+<td>blocks[].idx</td>
+<td>整数</td>
+<td>页内区块索引，清理后可能有间隔</td>
+</tr>
+<tr>
+<td>blocks[].type</td>
+<td>字符串</td>
+<td>Text、Title、Caption、Footnote、Formula、Table、Picture、Page-header、Page-footer、Stamp、Chemical Structure、Code Block 等</td>
+</tr>
+<tr>
+<td>blocks[].bbox</td>
+<td>4 个数字的数组</td>
+<td><code>[左,上,右,下]</code>，相对于该渲染页的像素坐标</td>
+</tr>
+<tr>
+<td>blocks[].content</td>
+<td>字符串</td>
+<td>区块的文本、HTML、LaTeX 或 Markdown</td>
+</tr>
+<tr>
+<td>blocks[].format</td>
+<td>字符串</td>
+<td>text、html、latex 或 markdown</td>
+</tr>
+<tr>
+<td>pages[].unattached_formula_numbering</td>
+<td>可选</td>
+<td>未能绑定到公式区块的编号信息；仅部分文档产生</td>
+</tr>
+<tr>
+<td>data.metadata.page_num</td>
+<td>整数</td>
+<td>总页数，区别于 pages[].page_num 的从零编号</td>
+</tr>
+<tr>
+<td>data.metadata.file_type</td>
+<td>字符串</td>
+<td>识别出的文件扩展名</td>
+</tr>
+<tr>
+<td>data.metadata.processing_time_ms</td>
+<td>整数</td>
+<td>后端处理毫秒数，不包含完整公网请求、排队和全部冷启动时间</td>
+</tr>
+</tbody>
+</table>
+<p>开启调试时 metadata 可能包含额外诊断字段。调用者应允许新增字段，不能假设所有 PDF 都有表格或所有图片都能识别为文字。</p>
+<h2>4. 异步提交与查询</h2>
+<p>提交：URL 换成 <code>/v1/parse/async</code>，上传参数与同步完全相同。客户端本身不要添加 <code>X-Fc-Invocation-Type: Async</code>，否则拿不到业务 task_id。</p>
+<pre><code class="language-bash">curl --request POST 'https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run/v1/parse/async' \
+  --header 'Authorization: Bearer &lt;FC_TOKEN&gt;' \
+  --form 'file=@/absolute/path/document.pdf' \
+  --form 'output_formats=markdown' --form 'output_formats=json'
+</code></pre>
+<p>成功响应为 HTTP 200：</p>
+<pre><code class="language-json">{&quot;code&quot;:0,&quot;message&quot;:&quot;Task submitted&quot;,&quot;warnings&quot;:[],&quot;data&quot;:{&quot;task_id&quot;:&quot;32位十六进制ID&quot;,&quot;status&quot;:&quot;queuing&quot;}}
+</code></pre>
+<p>文件先写入共享 NAS，再由服务提交小体积任务引用到 FC 原生异步队列。模型推理不依赖返回 HTTP 响应后的进程内后台线程。查询可以命中另一个实例。</p>
+<p>查询完整请求：</p>
+<pre><code class="language-bash">curl --request POST 'https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run/v1/parse/async_check' \
+  --header 'Authorization: Bearer &lt;FC_TOKEN&gt;' \
+  --form 'task_id=替换成提交返回的任务ID'
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>查询参数</th>
+<th>必填</th>
+<th>类型</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>task_id</td>
+<td>是</td>
+<td>文本</td>
+<td>异步提交返回的 ID；不是 RequestId 或同步解析内部 ID</td>
+</tr>
+<tr>
+<td>api_key</td>
+<td>否</td>
+<td>文本</td>
+<td>兼容字段，可省略</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-json">{&quot;code&quot;:0,&quot;message&quot;:&quot;Task status&quot;,&quot;warnings&quot;:[],&quot;data&quot;:{
+  &quot;record_id&quot;:null,&quot;task_id&quot;:&quot;32位十六进制ID&quot;,&quot;status&quot;:&quot;success&quot;,&quot;file_name&quot;:&quot;document.pdf&quot;,
+  &quot;result&quot;:{&quot;file_name&quot;:&quot;document.pdf&quot;,&quot;outputs&quot;:{&quot;markdown&quot;:&quot;正文&quot;,&quot;json&quot;:{&quot;pages&quot;:[]}}},
+  &quot;error&quot;:null,&quot;metadata&quot;:{&quot;page_num&quot;:1,&quot;file_type&quot;:&quot;.pdf&quot;,&quot;processing_time_ms&quot;:1800}
+}}
+</code></pre>
+<p>查询的 envelope、result、metadata 解释与同步相同。record_id 是兼容字段，当前为 null。状态：</p>
+<table>
+<thead>
+<tr>
+<th>status</th>
+<th>含义</th>
+<th>客户端动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>queuing</td>
+<td>等待 FC 异步投递/执行</td>
+<td>每 2–5 秒查询，避免高频轮询启动更多 GPU 实例</td>
+</tr>
+<tr>
+<td>processing</td>
+<td>某个 worker 已原子认领</td>
+<td>继续有界等待</td>
+</tr>
+<tr>
+<td>success</td>
+<td>成功，result/metadata 可用</td>
+<td>保存结果，停止轮询</td>
+</tr>
+<tr>
+<td>failed</td>
+<td>失败，error 给出原因</td>
+<td>停止轮询，检查原因，不无限自动重放</td>
+</tr>
+</tbody>
+</table>
+<p>默认结果保留 7 天；过期查询 404，后续新任务提交时清理过期文件。输入文件在完成/失败后删除；未确认投递的输入保留至过期，便于核查。意外终止的 processing 任务在执行期限超过 720 秒后查询显示 failed；queued 超过 24 小时显示 failed。任务重投不会重复认领；该策略不承诺崩溃中的推理能原地续算。</p>
+<p>如果提交响应为 HTTP 503，且 detail 中含 <code>async_dispatch_not_confirmed</code> 和 task_id，表示平台接收结果不确定。先按这个 task_id 查询，不要立即重复上传造成重复收费。</p>
+<h2>5. Demo 的四个业务接口</h2>
+<h3>5.1 提交 Demo 任务</h3>
+<pre><code class="language-bash">curl --request POST 'https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run/v1/demo/jobs' \
+  --header 'Authorization: Bearer &lt;FC_TOKEN&gt;' \
+  --form 'file=@/absolute/path/document.pdf' \
+  --form 'temperature=0' --form 'top_p=1' --form 'repetition_penalty=1' \
+  --form 'keep_header_footer=true'
+</code></pre>
+<p>file 必填，其余为可选文本字段。temperature/top_p/repetition_penalty 范围见第 3 节，keep_header_footer 默认 true。上传大小、页数、像素限制与核心 FC 解析相同，未沿用原本地 Demo 的 100 MiB 上传上限。</p>
+<pre><code class="language-json">{&quot;code&quot;:0,&quot;message&quot;:&quot;success&quot;,&quot;data&quot;:{&quot;id&quot;:&quot;32位十六进制ID&quot;,&quot;status&quot;:&quot;queued&quot;}}
+</code></pre>
+<p>Demo 使用 <code>id</code>，核心异步协议使用 <code>task_id</code>。</p>
+<h3>5.2 查状态与页面预览</h3>
+<pre><code class="language-http">GET https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run/v1/demo/jobs/&lt;job_id&gt;
+Authorization: Bearer &lt;FC_TOKEN&gt;
+</code></pre>
+<p>无 Body。data 包含 id、status、file_name、pages、metadata、error、result_url。queued/processing/success/failed 含义与异步相同。<code>pages[]</code> 包含从 0 开始的 page_num、page_size 和 image_url。image_url/result_url 是相对路径，拼接 Base URL 后访问，每次均携带 Token。生成前 pages 为空。</p>
+<h3>5.3 取结果</h3>
+<pre><code class="language-http">GET https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run/v1/demo/jobs/&lt;job_id&gt;/result
+Authorization: Bearer &lt;FC_TOKEN&gt;
+</code></pre>
+<p>无 Body。成功返回 <code>{"code":0,"message":"success","data":{...}}</code>，data 为原 Demo 的解析结果对象（file_name、outputs、metadata）。未完成返回 409；不存在/过期返回 404。</p>
+<h3>5.4 下载图片</h3>
+<pre><code class="language-http">GET https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run/v1/demo/jobs/&lt;job_id&gt;/assets/&lt;asset_id&gt;
+Authorization: Bearer &lt;FC_TOKEN&gt;
+</code></pre>
+<p>无 Body。job_id 取提交响应，asset_id 从预览或解析结果返回的 URL 取得，不能随意指定实例路径。成功返回图片二进制及对应 Content-Type，而非 JSON。Postman 可 Save Response 保存。不存在/过期/非法路径返回 404。</p>
+<h2>6. 健康检查、文档和初始化</h2>
+<p>以下请求无 Body，都带同一 Authorization Header：</p>
+<pre><code class="language-http">GET https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run/
+GET https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run/health/live
+GET https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run/health/ready
+GET https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run/docs
+GET https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run/redoc
+GET https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run/openapi.json
+</code></pre>
+<p>根路径返回 service=<code>oxr-fc</code>、version、parse_path。live 返回 <code>{"status":"alive"}</code>，只证明入口存活；ready 返回 <code>{"status":"ready"}</code> 或 503。docs/redoc 返回 HTML，openapi.json 返回描述 JSON。HTML 页面在浏览器进一步加载描述/脚本仍需正确认证，Postman 请求 HTML 成功不等于完整浏览器交互已验收。</p>
+<p>FC 自动 POST /initialize，不要求客户端每次调用。平台预热超时 300 秒，程序内部模型启动等待 240 秒。最小实例数为 0 时平台可回收空闲实例；NAS 权重和持久任务记录仍保留，下一实例需要重新加载模型。</p>
+<h2>7. 错误与重试</h2>
+<table>
+<thead>
+<tr>
+<th>HTTP</th>
+<th>典型内容</th>
+<th>处理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>200，code=1133</td>
+<td>参数不支持/格式错误，data=null</td>
+<td>修改参数，不当成成功</td>
+</tr>
+<tr>
+<td>200，code=1137</td>
+<td>后端解析失败</td>
+<td>检查文档和日志</td>
+</tr>
+<tr>
+<td>403</td>
+<td>FC AccessDenied，无/错误/禁用 Token</td>
+<td>检查触发器和 Authorization；不要换成云 AK</td>
+</tr>
+<tr>
+<td>404</td>
+<td>不存在、过期的任务/资源/路径</td>
+<td>核对任务种类、ID、保留时间</td>
+</tr>
+<tr>
+<td>409</td>
+<td>Demo 结果未完成</td>
+<td>继续查询状态</td>
+</tr>
+<tr>
+<td>413</td>
+<td>请求体、页数、像素、帧数或结果超限</td>
+<td>拆分/缩小文件，减少内嵌图片</td>
+</tr>
+<tr>
+<td>415</td>
+<td>非 multipart 或不支持的文件扩展名</td>
+<td>使用正确上传方式</td>
+</tr>
+<tr>
+<td>422</td>
+<td>缺文件、损坏文件、非法 JSON 配置</td>
+<td>修正请求</td>
+</tr>
+<tr>
+<td>429</td>
+<td>instance_busy</td>
+<td>有界退避，不无限重试；不代表本轮已成功扩容</td>
+</tr>
+<tr>
+<td>502</td>
+<td>后端不可用或 worker 失败</td>
+<td>检查健康及任务状态；不要自动重放未知结果</td>
+</tr>
+<tr>
+<td>503</td>
+<td>模型未就绪/投递未确认</td>
+<td>检查初始化日志；有 task_id 先查询</td>
+</tr>
+<tr>
+<td>504</td>
+<td>后端推理超时</td>
+<td>实例会停止模型以避免重叠执行，需替换实例后重试</td>
+</tr>
+</tbody>
+</table>
+<p>FC 自身还可能返回 ResourceThrottled、ResourceExhausted、初始化错误等平台响应。平台错误常带 RequestId、Code、Message；保留 RequestId 以便定位。初始化失败有时外层 HTTP 200，检查 X-Fc-Error-Type 和 errorMessage。</p>
+<h2>8. Python 完整同步示例</h2>
+<pre><code class="language-python">import os
+import requests
+
+base = &quot;https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run&quot;
+headers = {&quot;Authorization&quot;: &quot;Bearer &quot; + os.environ[&quot;OXR_FC_TOKEN&quot;]}
+with open(&quot;document.pdf&quot;, &quot;rb&quot;) as file:
+    response = requests.post(
+        base + &quot;/v1/parse/sync&quot;, headers=headers,
+        files={&quot;file&quot;: (&quot;document.pdf&quot;, file, &quot;application/pdf&quot;)},
+        data=[(&quot;output_formats&quot;, &quot;markdown&quot;), (&quot;output_formats&quot;, &quot;json&quot;)],
+        timeout=(15, 700),
+    )
+response.raise_for_status()
+body = response.json()
+if body.get(&quot;code&quot;) != 0:
+    raise RuntimeError(body.get(&quot;message&quot;, &quot;OXR failed&quot;))
+print(body[&quot;data&quot;][&quot;result&quot;][&quot;outputs&quot;][&quot;markdown&quot;])
+</code></pre>
+<h2>9. Python 完整异步示例</h2>
+<pre><code class="language-python">import os
+import time
+import requests
+
+base = &quot;https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run&quot;
+headers = {&quot;Authorization&quot;: &quot;Bearer &quot; + os.environ[&quot;OXR_FC_TOKEN&quot;]}
+with open(&quot;document.pdf&quot;, &quot;rb&quot;) as file:
+    r = requests.post(base + &quot;/v1/parse/async&quot;, headers=headers,
+        files={&quot;file&quot;: (&quot;document.pdf&quot;, file, &quot;application/pdf&quot;)}, timeout=(15, 700))
+r.raise_for_status()
+submitted = r.json()
+if submitted.get(&quot;code&quot;) != 0:
+    raise RuntimeError(submitted.get(&quot;message&quot;))
+task_id = submitted[&quot;data&quot;][&quot;task_id&quot;]
+deadline = time.monotonic() + 900
+while time.monotonic() &lt; deadline:
+    r = requests.post(base + &quot;/v1/parse/async_check&quot;, headers=headers,
+                      data={&quot;task_id&quot;: task_id}, timeout=(15, 700))
+    r.raise_for_status()
+    body = r.json()
+    if body.get(&quot;code&quot;) != 0:
+        raise RuntimeError(body.get(&quot;message&quot;))
+    task = body[&quot;data&quot;]
+    if task[&quot;status&quot;] == &quot;success&quot;:
+        print(task[&quot;result&quot;][&quot;outputs&quot;])
+        break
+    if task[&quot;status&quot;] == &quot;failed&quot;:
+        raise RuntimeError(task[&quot;error&quot;])
+    time.sleep(3)
+else:
+    raise TimeoutError(&quot;Polling deadline exceeded; keep task_id for later query&quot;)
+</code></pre>
+<h2>10. 部署与验收状态</h2>
+<p>旧 fc-v1 曾通过真实同步图片/PDF测试。本文的新异步、Demo、图片修复属于 1.1.0，必须以本轮发布回执和真实验收结果为准。未完成真实压力、实例回收或故障注入测试前，不承诺吞吐量、SLA 或自动恢复推理进程。</p></body></html>

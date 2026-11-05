@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -14,8 +15,14 @@ from oxr.server.schemas import (
     AsyncQueryResponse,
     AsyncQueryData
 )
-from oxr.pipeline.orchestrator import process_document
 from oxr.server.queue.memory_store import MemoryTaskStore
+
+
+async def process_document(*args, **kwargs):
+    # Option validation is also reused by the lightweight FC ingress. Import the
+    # inference pipeline only when a backend actually executes a document.
+    from oxr.pipeline.orchestrator import process_document as execute
+    return await execute(*args, **kwargs)
 
 router = APIRouter()
 LOGGER = logging.getLogger(__name__)
@@ -98,6 +105,8 @@ def _parse_model_option(config: Dict[str, Any], key: str) -> Optional[float]:
         raise ValueError(f"extra.{key} must be a number.") from exc
 
     minimum, maximum, include_minimum = MODEL_OPTION_RANGES[key]
+    if not math.isfinite(parsed_value):
+        raise ValueError(f"extra.{key} must be finite.")
     if include_minimum:
         if parsed_value < minimum:
             raise ValueError(f"extra.{key} must be between {minimum} and {maximum}.")

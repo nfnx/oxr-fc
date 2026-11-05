@@ -1,0 +1,759 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "OXR on Alibaba FC",
+    "version": "1.1.0"
+  },
+  "paths": {
+    "/": {
+      "get": {
+        "summary": "Root",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/live": {
+      "get": {
+        "summary": "Live",
+        "operationId": "live_health_live_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "summary": "Ready",
+        "operationId": "ready_health_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/parse/sync": {
+      "post": {
+        "summary": "Parse PDF/image and return Markdown and/or structured JSON",
+        "operationId": "parse_v1_parse_sync_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "One PDF or single-frame document image; total body <=20 MiB, PDF <=20 pages."
+                  },
+                  "output_formats": {
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "markdown",
+                        "json"
+                      ]
+                    },
+                    "type": "array",
+                    "default": [
+                      "markdown",
+                      "json"
+                    ]
+                  },
+                  "feature_config": {
+                    "type": "string",
+                    "description": "JSON string, e.g. {\"keep_header_footer\":true}."
+                  },
+                  "extra": {
+                    "type": "string",
+                    "description": "JSON string: temperature (0..2), top_p (0..1), repetition_penalty (>0)."
+                  },
+                  "element_formats": {
+                    "type": "string",
+                    "description": "JSON string; image=base64 (default) or none, formula=latex, table=html/markdown, cs=smiles/image."
+                  },
+                  "api_key": {
+                    "type": "string",
+                    "description": "Optional legacy field; not authentication. FC Bearer header is required."
+                  }
+                },
+                "type": "object",
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SyncParseResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BusinessError"
+                    }
+                  ],
+                  "title": "Response Parse V1 Parse Sync Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/parse/async": {
+      "post": {
+        "summary": "Persist document and dispatch a durable FC asynchronous worker invocation",
+        "operationId": "parse_v1_parse_async_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "One PDF or single-frame document image; total body <=20 MiB, PDF <=20 pages."
+                  },
+                  "output_formats": {
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "markdown",
+                        "json"
+                      ]
+                    },
+                    "type": "array",
+                    "default": [
+                      "markdown",
+                      "json"
+                    ]
+                  },
+                  "feature_config": {
+                    "type": "string",
+                    "description": "JSON string, e.g. {\"keep_header_footer\":true}."
+                  },
+                  "extra": {
+                    "type": "string",
+                    "description": "JSON string: temperature (0..2), top_p (0..1), repetition_penalty (>0)."
+                  },
+                  "element_formats": {
+                    "type": "string",
+                    "description": "JSON string; image=base64 (default) or none, formula=latex, table=html/markdown, cs=smiles/image."
+                  },
+                  "api_key": {
+                    "type": "string",
+                    "description": "Optional legacy field; not authentication. FC Bearer header is required."
+                  }
+                },
+                "type": "object",
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AsyncSubmitResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BusinessError"
+                    }
+                  ],
+                  "title": "Response Parse V1 Parse Async Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/demo/jobs": {
+      "post": {
+        "summary": "Submit a persistent Demo job with page previews and image resources",
+        "operationId": "parse_v1_demo_jobs_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "temperature": {
+                    "type": "number",
+                    "maximum": 2.0,
+                    "minimum": 0.0,
+                    "default": 0
+                  },
+                  "top_p": {
+                    "type": "number",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "default": 1
+                  },
+                  "repetition_penalty": {
+                    "type": "number",
+                    "maximum": 2.0,
+                    "minimum": 0.1,
+                    "default": 1
+                  },
+                  "keep_header_footer": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                },
+                "type": "object",
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/parse/async_check": {
+      "post": {
+        "summary": "Read persisted async status/result from shared NAS",
+        "operationId": "async_check_v1_parse_async_check_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_async_check_v1_parse_async_check_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsyncQueryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/demo/jobs/{job_id}": {
+      "get": {
+        "summary": "Demo Status",
+        "operationId": "demo_status_v1_demo_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/demo/jobs/{job_id}/result": {
+      "get": {
+        "summary": "Demo Result",
+        "operationId": "demo_result_v1_demo_jobs__job_id__result_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/demo/jobs/{job_id}/assets/{asset_id}": {
+      "get": {
+        "summary": "Demo Asset",
+        "operationId": "demo_asset_v1_demo_jobs__job_id__assets__asset_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AsyncQueryData": {
+        "properties": {
+          "record_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Id"
+          },
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Name"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "status",
+          "error",
+          "metadata"
+        ],
+        "title": "AsyncQueryData"
+      },
+      "AsyncQueryResponse": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "success"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "default": []
+          },
+          "data": {
+            "$ref": "#/components/schemas/AsyncQueryData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "AsyncQueryResponse"
+      },
+      "AsyncSubmitData": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "status"
+        ],
+        "title": "AsyncSubmitData"
+      },
+      "AsyncSubmitResponse": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "success"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "default": []
+          },
+          "data": {
+            "$ref": "#/components/schemas/AsyncSubmitData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "AsyncSubmitResponse"
+      },
+      "Body_async_check_v1_parse_async_check_post": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id"
+        ],
+        "title": "Body_async_check_v1_parse_async_check_post"
+      },
+      "BusinessError": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "default": []
+          },
+          "data": {
+            "type": "null",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "BusinessError"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "SyncParseData": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "result": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Result"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "result",
+          "metadata"
+        ],
+        "title": "SyncParseData"
+      },
+      "SyncParseResponse": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "success"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "default": []
+          },
+          "data": {
+            "$ref": "#/components/schemas/SyncParseData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "SyncParseResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "FCBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "security": [
+    {
+      "FCBearer": []
+    }
+  ],
+  "servers": [
+    {
+      "url": "https://rethos-oxr-demo-neqzwwuitq.cn-hangzhou.fcapp.run",
+      "description": "Target endpoint; see release receipt for deployed version"
+    }
+  ]
+}
